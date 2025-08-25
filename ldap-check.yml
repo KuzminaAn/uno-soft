@@ -1,0 +1,86 @@
+---
+- name: Проверка состояния OpenLDAP
+  hosts: ldap
+  become: yes
+  vars:
+    ldap_basedn: "dc=uno-soft,dc=ru"
+    ldap_admin_dn: "cn=admin,dc=uno-soft,dc=ru"
+
+  tasks:
+    - name: Проверяем, установлен ли slapd
+      command: dpkg -s slapd
+      register: slapd_installed
+      ignore_errors: yes
+
+    - name: Выводим статус установки slapd
+      debug:
+        msg: >
+          {% if slapd_installed.rc == 0 %}
+            OpenLDAP (slapd) установлен
+          {% else %}
+            OpenLDAP (slapd) НЕ установлен
+          {% endif %}
+
+    - name: Проверяем, запущен ли slapd
+      command: systemctl is-active slapd
+      register: slapd_status
+      ignore_errors: yes
+
+    - name: Выводим статус сервиса slapd
+      debug:
+        msg: >
+          {% if slapd_status.stdout == "active" %}
+            Сервис slapd работает
+          {% else %}
+            Сервис slapd НЕ запущен
+          {% endif %}
+
+    - name: Проверяем, существует ли база LDAP
+      command: >
+        ldapsearch -x -LLL -b "{{ ldap_basedn }}" -D "{{ ldap_admin_dn }}"
+        -w "{{ ldap_admin_password }}" "(objectClass=*)"
+      register: ldap_base_check
+      ignore_errors: yes
+
+    - name: Выводим результат проверки базы
+      debug:
+        msg: >
+          {% if ("dn: " ~ ldap_basedn) in ldap_base_check.stdout %}
+            База {{ ldap_basedn }} найдена
+          {% else %}
+            База {{ ldap_basedn }} не найдена
+          {% endif %}
+
+    - name: Получаем список пользователей
+      command: >
+        ldapsearch -x -LLL -D "{{ ldap_admin_dn }}" -w "{{ ldap_admin_password }}"
+        -b "ou=People,{{ ldap_basedn }}" "(objectClass=inetOrgPerson)" dn
+      register: ldap_users
+      ignore_errors: yes
+
+    - name: Выводим список пользователей
+      debug:
+        msg: |
+          {% if ldap_users.stdout %}
+          Список пользователей:
+          {{ ldap_users.stdout | regex_findall('dn: .*') | join('\n') }}
+          {% else %}
+          Пользователи не найдены
+          {% endif %}
+
+    - name: Получаем список групп
+      command: >
+        ldapsearch -x -LLL -D "{{ ldap_admin_dn }}" -w "{{ ldap_admin_password }}"
+        -b "ou=Groups,{{ ldap_basedn }}" "(objectClass=posixGroup)" dn
+      register: ldap_groups
+      ignore_errors: yes
+
+    - name: Выводим список групп
+      debug:
+        msg: |
+          {% if ldap_groups.stdout %}
+          Список групп:
+          {{ ldap_groups.stdout | regex_findall('dn: .*') | join('\n') }}
+          {% else %}
+          Группы не найдены
+          {% endif %}

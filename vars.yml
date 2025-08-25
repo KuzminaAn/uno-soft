@@ -1,0 +1,30 @@
+---
+ldap_domain: "uno-soft.ru"
+ldap_org: "Uno Soft Organization"
+ldap_basedn: "dc=uno-soft,dc=ru"
+
+ldap_users:
+  - username: "user1"
+    name: "Anna"
+    surname: "Kuzmina"
+    uid: 1001
+    gid: 2001
+    email: "user1@uno-soft.ru"
+  
+  - username: "user2"
+    name: "Sirius"
+    surname: "Black"
+    uid: 1002
+    gid: 2002
+    email: "user2@uno-soft.ru"
+
+ldap_groups:
+  - name: "developers"
+    gid: 2001
+    description: "developers"
+#    members: ["user1", "user2"]
+  
+  - name: "admins"
+    gid: 2002
+    description: "admins"
+#    members: ["user1"]

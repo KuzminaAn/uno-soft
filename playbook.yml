@@ -1,0 +1,109 @@
+---
+- name: Установка и настройка OpenLDAP
+  hosts: ldap
+  become: true
+  vars_files:
+    - vars.yml
+    - vault.yml
+
+  tasks:
+    - name: Установка OpenLDAP и утилит
+      apt:
+        name:
+          - slapd
+          - ldap-utils
+          - python3-ldap
+        state: present
+        update_cache: yes
+
+    - name: Установка debconf-utils
+      apt:
+        name: debconf-utils
+        state: present
+      become: yes
+
+    - name: Настройка debconf параметров
+      debconf:
+        name: slapd
+        question: "{{ item.question }}"
+        value: "{{ item.value }}"
+        vtype: "{{ item.vtype }}"
+      loop:
+        - { question: "slapd/domain", value: "{{ ldap_domain }}", vtype: "string" }
+        - { question: "slapd/password1", value: "{{ ldap_admin_password }}", vtype: "password" }
+        - { question: "slapd/password2", value: "{{ ldap_admin_password }}", vtype: "password" }
+        - { question: "slapd/allow_ldap_v2", value: "false", vtype: "boolean" }
+        - { question: "slapd/no_configuration", value: "false", vtype: "boolean" }
+
+    - name: Переконфигурация slapd для применения настроек
+      command: dpkg-reconfigure -f noninteractive slapd
+      changed_when: false
+      
+    - name: Ждем запуска LDAP сервера
+      wait_for:
+        port: 389
+        delay: 60
+        timeout: 120
+      changed_when: false
+
+    - name: Создание базовой структуры LDAP
+      community.general.ldap_entry:
+        dn: "{{ ldap_basedn }}"
+        objectClass: 
+          - dcObject
+          - organization
+        attributes:
+          dc: "{{ ldap_domain.split('.')[0] }}"
+          o: "{{ ldap_org }}"
+        bind_dn: "cn=admin,{{ ldap_basedn }}"
+        bind_pw: "{{ ldap_admin_password }}"
+
+    - name: Создание OU для пользователей
+      community.general.ldap_entry:
+        dn: "ou=People,{{ ldap_basedn }}"
+        objectClass: organizationalUnit
+        attributes:
+          ou: People
+        bind_dn: "cn=admin,{{ ldap_basedn }}"
+        bind_pw: "{{ ldap_admin_password }}"
+
+    - name: Создание OU для групп
+      community.general.ldap_entry:
+        dn: "ou=Groups,{{ ldap_basedn }}"
+        objectClass: organizationalUnit
+        attributes:
+          ou: Groups
+        bind_dn: "cn=admin,{{ ldap_basedn }}"
+        bind_pw: "{{ ldap_admin_password }}"
+
+    - name: Добавление групп в LDAP
+      community.general.ldap_entry:
+        dn: "cn={{ item.name }},ou=Groups,{{ ldap_basedn }}"
+        objectClass: posixGroup
+        attributes:
+          cn: "{{ item.name }}"
+          gidNumber: "{{ item.gid }}"
+        bind_dn: "cn=admin,{{ ldap_basedn }}"
+        bind_pw: "{{ ldap_admin_password }}"
+      loop: "{{ ldap_groups }}"
+
+    - name: Добавление пользователей в LDAP
+      community.general.ldap_entry:
+        dn: "uid={{ item.uid }},ou=People,{{ ldap_basedn }}"
+        objectClass: 
+          - inetOrgPerson
+          - posixAccount
+          - shadowAccount
+        attributes:
+          cn: "{{ item.name }} {{ item.surname }}"
+          sn: "{{ item.surname }}"
+          uid: "{{ item.username }}"
+          uidNumber: "{{ item.uid }}"
+          gidNumber: "{{ item.gid }}"
+          homeDirectory: "/home/{{ item.username }}"
+          loginShell: "/bin/bash"
+          mail: "{{ item.email }}"
+          userPassword: "{{ ldap_passwords[item.username] | password_hash('sha256_crypt') }}"
+        bind_dn: "cn=admin,{{ ldap_basedn }}"
+        bind_pw: "{{ ldap_admin_password }}"
+      loop: "{{ ldap_users }}"
