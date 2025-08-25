@@ -4,6 +4,7 @@
 
 ## Структура проекта
 
+```bash
 ldap/
 ├── inventory.yml         # Инвентарь с хостами
 ├── playbook.yml          # Основной playbook
@@ -11,6 +12,7 @@ ldap/
 ├── vault.yml             # Зашифрованные пароли (Ansible Vault)
 ├── ldap-check.yml        # playbook для проверки корректности результата 
 └── README.md             # Этот файл
+```
 
 ## Подготовка перед запуском
 
@@ -60,3 +62,5 @@ ansible-playbook -i inventory.yml playbook.yml --ask-vault-pass
 ```
 ansible-playbook -i inventory.yml ldap-check.yml
 ```
+
+![результат](./images/done.png)
